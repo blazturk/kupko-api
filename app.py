@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, render_template, redirect
 from flask_marshmallow.sqla import SQLAlchemyAutoSchema
 from flask_sqlalchemy import SQLAlchemy
 from flask_marshmallow import Marshmallow
@@ -42,14 +42,22 @@ meals_schema = MealSchema(many=True)
 #Create meal
 @app.route('/meal', methods=['POST'])
 def create_meal():
-    name = request.json['name']
-    price = request.json['price']
-    meal_type = request.json['meal_type']
+    # Handle both JSON and form submissions safely
+    data = request.get_json(silent=True) or request.form
+
+    # Validate keys
+    if not all(k in data for k in ('name', 'price', 'meal_type')):
+        return jsonify({"error": "Missing required fields"}), 400
+
+    name = data['name']
+    price = float(data['price'])
+    meal_type = data['meal_type']
 
     new_meal = Meal(name=name, price=price, meal_type=meal_type)
     db.session.add(new_meal)
     db.session.commit()
     return meal_schema.jsonify(new_meal)
+
 
 #Get all meals
 @app.route('/meal', methods=['GET'])
@@ -79,12 +87,25 @@ def update_meal(id):
     return meal_schema.jsonify(meal)
 
 #Delete meal
-@app.route('/meal/<id>', methods=['DELETE'])
-def delete_meal(id):
-    meal = Meal.query.get(id)
-    db.session.delete(meal)
+@app.route('/delete/<int:id>')
+def erase(id):
+    # Deletes the data on the basis of unique id and
+    # redirects to home page
+    data = Meal.query.get(id)
+    db.session.delete(data)
     db.session.commit()
-    return meal_schema.jsonify(meal)
+    return redirect('/')
+
+
+@app.route('/')
+def index():
+    profiles = Meal.query.all()
+    return render_template('index.html', profiles=profiles)
+
+@app.route('/add_meal')
+def add_data():
+    return render_template('add_meal.html')
+
 
 if __name__ == '__main__':
     app.run(debug=True)
