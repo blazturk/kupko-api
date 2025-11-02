@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html>
+   <head>
+      <title>Index Page</title>
+   </head>
+   <body>
+      <h3>Meals</h3>
+      <a href="/add_meal">ADD</a>
+      <br>
+      <table>
+         <thead>
+            <th>Id</th>
+            <th>Name</th>
+            <th>Price</th>
+            <th>Meal Type</th>
+         </thead>
+         {% for data in profiles %}
+         <tbody>
+            <td>{{data.id}}</td>
+            <td>{{data.name}}</td>
+            <td>{{data.price}}</td>
+            <td>{{data.meal_type}}</td>
+            <td><a href="/delete/{{data.id}}" type="button">Delete</a></td>
+         </tbody>
+         {% endfor%}
+      </table>
+   </body>
+</html>

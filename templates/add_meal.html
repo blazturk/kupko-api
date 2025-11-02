@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Add Meal</title>
+</head>
+<body>
+    <h1>Add a New Meal</h1>
+    <form action="/meal" method="POST">
+        <label for="name">Meal Name:</label><br>
+        <input type="text" id="name" name="name" required><br><br>
+
+        <label for="price">Price:</label><br>
+        <input type="number" id="price" name="price" step="0.01" required><br><br>
+
+        <label for="meal_type">Meal Type:</label><br>
+        <input type="text" id="meal_type" name="meal_type" required><br><br>
+
+        <button type="submit">Add Meal</button>
+    </form>
+</body>
+</html>
