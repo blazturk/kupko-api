@@ -13,6 +13,9 @@
             <th>Name</th>
             <th>Price</th>
             <th>Meal Type</th>
+            <th>Time of day</th>
+            <th>Prep Time</th>
+            <th>Allergies</th>
          </thead>
          {% for data in profiles %}
          <tbody>
@@ -20,6 +23,9 @@
             <td>{{data.name}}</td>
             <td>{{data.price}}</td>
             <td>{{data.meal_type}}</td>
+            <td>{{data.time_of_day}}</td>
+            <td>{{data.prep_time}}</td>
+            <td>{{data.allergies}}</td>
             <td><a href="/delete/{{data.id}}" type="button">Delete</a></td>
          </tbody>
          {% endfor%}
