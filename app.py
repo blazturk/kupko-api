@@ -2,9 +2,11 @@ from flask import Flask, request, jsonify, render_template, redirect
 from flask_marshmallow.sqla import SQLAlchemyAutoSchema
 from flask_sqlalchemy import SQLAlchemy
 from flask_marshmallow import Marshmallow
+from sqlalchemy import func, or_, and_, not_
+from sqlalchemy.exc import DataError
 import os
-
 from marshmallow_sqlalchemy import SQLAlchemySchema
+from sqlalchemy import text, func
 
 app = Flask(__name__)
 basedir = os.path.abspath(os.path.dirname(__file__))
@@ -23,11 +25,17 @@ class Meal(db.Model):
     name = db.Column(db.String(100), nullable=False, unique=True)
     price = db.Column(db.Float, nullable=False)
     meal_type = db.Column(db.String(100), nullable=False)
+    time_of_day = db.Column(db.String(100), nullable=False)
+    prep_time = db.Column(db.Integer, nullable=False)
+    allergies = db.Column(db.String(255), nullable=False)
 
-def __init__(self, name, price, meal_type):
+def __init__(self, name, price, meal_type, time_of_day, prep_time, allergies):
     self.name = name
     self.price = price
     self.meal_type = meal_type
+    self.time_of_day = time_of_day
+    self.prep_time = prep_time
+    self.allergies = allergies
 
 # Product Schema
 class MealSchema(SQLAlchemyAutoSchema):
@@ -46,12 +54,15 @@ def create_meal():
     data = request.get_json(silent=True) or request.form
 
     # Validate keys
-    if not all(k in data for k in ('name', 'price', 'meal_type')):
+    if not all(k in data for k in ('name', 'price', 'meal_type', 'time_of_day', 'prep_time', 'allergies')):
         return jsonify({"error": "Missing required fields"}), 400
 
     name = data['name']
     price = float(data['price'])
     meal_type = data['meal_type']
+    time_of_day = data['time_of_day']
+    prep_time = int(data['prep_time'])
+    allergies = data['allergies']
 
     new_meal = Meal(name=name, price=price, meal_type=meal_type)
     db.session.add(new_meal)
@@ -79,10 +90,16 @@ def update_meal(id):
     name = request.json['name']
     price = request.json['price']
     meal_type = request.json['meal_type']
+    time_of_day = request.json['time_of_day']
+    prep_time = request.json['prep_time']
+    allergies = request.json['allergies']
 
     meal.name = name
     meal.price = price
     meal.meal_type = meal_type
+    meal.time_of_day = time_of_day
+    meal.prep_time = prep_time
+    meal.allergies = allergies
     db.session.commit()
     return meal_schema.jsonify(meal)
 
@@ -95,6 +112,110 @@ def erase(id):
     db.session.delete(data)
     db.session.commit()
     return redirect('/')
+
+
+def build_filters_from_args(args):
+    filters = []
+
+    # meal_type: case-insensitive match (use ilike)
+    meal_type = args.get('meal_type')
+    if meal_type:
+        filters.append(Meal.meal_type.ilike(meal_type))
+
+    # price: convert to float safely
+    price = args.get('price')
+    if price:
+        try:
+            price_val = float(price)
+            filters.append(Meal.price <= price_val)
+        except ValueError:
+            # ignore invalid price or optionally raise a 400
+            pass
+
+    # prep_time: convert to int safely (or float if that's your schema)
+    prep_time = args.get('prep_time')
+    if prep_time:
+        try:
+            prep_val = int(prep_time)
+            filters.append(Meal.prep_time == prep_val)
+        except ValueError:
+            pass
+
+    # allergies: exclude any meal that contains ANY of the forbidden allergens.
+    # Use coalesce to make NULL become '' so concat/like doesn't become NULL.
+    allergies_param = args.get('allergies')
+    if allergies_param:
+        # Parse and normalize
+        allergies = [a.strip().lower() for a in allergies_param.split(',') if a.strip()]
+        if allergies:
+            allergy_filters = []
+            # Build: lower(concat(',', coalesce(allergies,''), ',')) LIKE '%,allergy,%'
+            allergies_field = func.lower(func.concat(',', func.coalesce(Meal.allergies, ''), ','))
+            for allergy in allergies:
+                pattern = f'%,{allergy},%'
+                allergy_filters.append(allergies_field.like(pattern))
+
+            # Exclude meals where ANY allergy matches: i.e. NOT (any LIKE)
+            # But keep meals that have no allergy info (NULL/empty) as allowed.
+            filters.append(
+                or_(
+                    Meal.allergies.is_(None),
+                    Meal.allergies == '',
+                    not_(or_(*allergy_filters))
+                )
+            )
+        else:
+            # allergies param provided but ended up empty after parsing; ignore
+            pass
+
+    return filters
+
+@app.route('/random_weekly_menu', methods=['GET'])
+def get_random_weekly_menu():
+    # Build filters once from the request arguments (don't rebuild inside the loop)
+    filters = build_filters_from_args(request.args)
+
+    weekly_menu = []
+    for day_index in range(7):
+        daily_meals = []
+        for tod in ['breakfast', 'lunch', 'dinner']:
+            meal = (
+                Meal.query
+                .filter(*filters, Meal.time_of_day == tod)
+                .order_by(func.random())
+                .first()
+            )
+            if meal:
+                daily_meals.append(meal)
+
+        weekly_menu.append({
+            "day": day_index + 1,
+            "menu": meals_schema.dump(daily_meals)
+        })
+
+    return jsonify(weekly_menu)
+
+#Z filtri: primer: http://127.0.0.1:5000/random_daily_menu?price=5.0 vrne random dnevni jedilnik, kjer je vsaka jed max 5€
+
+@app.route('/random_daily_menu', methods=['GET'])
+def get_random_daily_menu():
+    filters = build_filters_from_args(request.args)
+
+    meals = []
+    for tod in ['breakfast', 'lunch', 'dinner']:
+        meal = (
+            Meal.query
+            .filter(*filters, Meal.time_of_day == tod)
+            .order_by(func.random())
+            .first()
+        )
+        if meal:
+            meals.append(meal)
+
+    result = meals_schema.dump(meals)
+    return jsonify(result)
+
+
 
 
 @app.route('/')
