@@ -64,7 +64,7 @@ def create_meal():
     prep_time = int(data['prep_time'])
     allergies = data['allergies']
 
-    new_meal = Meal(name=name, price=price, meal_type=meal_type)
+    new_meal = Meal(name=name, price=price, meal_type=meal_type, time_of_day=time_of_day, prep_time=prep_time, allergies=allergies)
     db.session.add(new_meal)
     db.session.commit()
     return meal_schema.jsonify(new_meal)
@@ -170,15 +170,16 @@ def build_filters_from_args(args):
 
     return filters
 
-@app.route('/random_weekly_menu', methods=['GET'])
-def get_random_weekly_menu():
+@app.route('/random_menu/<n>/<times_of_day_list>', methods=['GET'])
+def get_random_menu(n, times_of_day_list):
     # Build filters once from the request arguments (don't rebuild inside the loop)
     filters = build_filters_from_args(request.args)
 
-    weekly_menu = []
-    for day_index in range(7):
+    menu = []
+    for day_index in range(int(n)):
         daily_meals = []
-        for tod in ['breakfast', 'lunch', 'dinner']:
+        times_of_day = times_of_day_list.split(',')
+        for tod in times_of_day:
             meal = (
                 Meal.query
                 .filter(*filters, Meal.time_of_day == tod)
@@ -188,34 +189,12 @@ def get_random_weekly_menu():
             if meal:
                 daily_meals.append(meal)
 
-        weekly_menu.append({
+        menu.append({
             "day": day_index + 1,
             "menu": meals_schema.dump(daily_meals)
         })
 
-    return jsonify(weekly_menu)
-
-#Z filtri: primer: http://127.0.0.1:5000/random_daily_menu?price=5.0 vrne random dnevni jedilnik, kjer je vsaka jed max 5€
-
-@app.route('/random_daily_menu', methods=['GET'])
-def get_random_daily_menu():
-    filters = build_filters_from_args(request.args)
-
-    meals = []
-    for tod in ['breakfast', 'lunch', 'dinner']:
-        meal = (
-            Meal.query
-            .filter(*filters, Meal.time_of_day == tod)
-            .order_by(func.random())
-            .first()
-        )
-        if meal:
-            meals.append(meal)
-
-    result = meals_schema.dump(meals)
-    return jsonify(result)
-
-
+    return jsonify(menu)
 
 
 @app.route('/')
