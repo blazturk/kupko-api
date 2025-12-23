@@ -139,11 +139,6 @@ def get_random_menu():
     max_price = request.args.get('max_price', default=None, type=float)  # ✅ 'max_price' parameter
     meal_type = request.args.get('meal_type', default=None, type=str)  # ✅
 
-    time_of_day_param = request.args.get('time_of_day', default='breakfast,lunch,dinner', type=str)
-
-    import urllib.parse
-    time_of_day_list = urllib.parse.unquote(time_of_day_param)
-
     # Parse allergies
     allergy_list = []
     if allergies and allergies.strip().lower() not in ['none', 'null', '']:
@@ -155,7 +150,7 @@ def get_random_menu():
     menu = []
     for day_index in range(n):
         daily_meals = []
-        time_of_day_items = time_of_day_list.split(',')
+        time_of_day_items = time_of_day.split(',')
 
         for tod in time_of_day_items:
             # FIXED: Use Meal.time_of_day (singular) to match your schema
