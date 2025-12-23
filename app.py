@@ -156,35 +156,30 @@ def get_random_menu():
         max_price = request.args.get('max_price', default=None, type=float)
         meal_type = request.args.get('meal_type', default=None, type=str)
 
-        # Get base filters (meal_type, max_price, prep_time)
         filters = build_filters_from_args(request.args)
-
         times_of_day = [tod.strip() for tod in times_of_day_list.split(',') if tod.strip()]
 
-        # Parse allergies separately
         allergy_list = []
         if allergies and allergies.strip():
             allergy_list = [a.strip().lower() for a in allergies.split(',') if a.strip()]
 
-        used_meal_ids = set()
+        # Track used meals PER TIME OF DAY to avoid same meal appearing twice in one day
+        # But allow repetition across different days
         menu = []
 
         for day_index in range(n):
             daily_meals = []
+            used_today = set()  # Reset for each day
 
             for tod in times_of_day:
-                # Apply base filters + time_of_day
                 query = Meal.query.filter(*filters, Meal.time_of_day == tod)
 
-                # Exclude already used meals
-                if used_meal_ids:
-                    query = query.filter(~Meal.id.in_(used_meal_ids))
+                # Only exclude meals already used TODAY (not across all days)
+                if used_today:
+                    query = query.filter(~Meal.id.in_(used_today))
 
-                # Apply allergy filters - SIMPLE VERSION
                 if allergy_list:
                     for allergen in allergy_list:
-                        # Exclude meals where allergies field contains this allergen
-                        # Handles both "gluten" and "gluten,eggs,dairy"
                         query = query.filter(
                             or_(
                                 Meal.allergies.is_(None),
@@ -197,7 +192,7 @@ def get_random_menu():
 
                 if meal:
                     daily_meals.append(meal)
-                    used_meal_ids.add(meal.id)
+                    used_today.add(meal.id)
 
             if daily_meals:
                 menu.append({
