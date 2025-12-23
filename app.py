@@ -137,7 +137,7 @@ def get_random_menu():
     n = request.args.get('n', default=7, type=int)
     time = request.args.get('time', default=None, type=str)
     allergies = request.args.get('allergies', default='', type=str)
-    max_price = request.args.get('max_price', default=None, type=float)
+    price = request.args.get('max_price', default=None, type=float)
     meal_type = request.args.get('meal_type', default=None, type=str)
 
     # Parse allergies
@@ -160,8 +160,8 @@ def get_random_menu():
             if time:
                 query = query.filter(Meal.prep_time == time)
 
-            if max_price is not None:
-                query = query.filter(Meal.price <= max_price)
+            if price is not None:
+                query = query.filter(Meal.price <= price)
 
             if meal_type:
                 query = query.filter(Meal.meal_type == meal_type)
