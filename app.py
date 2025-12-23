@@ -131,11 +131,10 @@ def build_filters_from_args(args):
 
 @app.route('/random_menu', methods=['GET'])
 def get_random_menu():
-    # Get all parameters from query string with defaults
-    n = request.args.get('n', default=7, type=int)
-    times_of_day_list = request.args.get('times_of_day', default='breakfast,lunch,dinner', type=str)
+    # FIXED: Use singular 'time_of_day' to match your schema
+    time_of_day_list = request.args.get('time_of_day', default='breakfast,lunch,dinner', type=str)
 
-    # Optional parameters - only use if provided
+    n = request.args.get('n', default=7, type=int)
     time = request.args.get('time', default=None, type=str)
     allergies = request.args.get('allergies', default='', type=str)
     max_price = request.args.get('max_price', default=None, type=float)
@@ -146,20 +145,18 @@ def get_random_menu():
     if allergies and allergies.strip().lower() not in ['none', 'null', '']:
         allergy_list = [a.strip().lower() for a in allergies.split(',') if a.strip()]
 
-    # Build filters from request arguments (excluding the ones we're handling separately)
-    # You might need to adjust build_filters_from_args to skip these parameters
+    # Build filters (make sure this function uses singular names too)
     filters = build_filters_from_args(request.args)
 
     menu = []
     for day_index in range(n):
         daily_meals = []
-        times_of_day = times_of_day_list.split(',')
+        time_of_day_items = time_of_day_list.split(',')
 
-        for tod in times_of_day:
-            # Start building the query with basic filters
+        for tod in time_of_day_items:
+            # FIXED: Use Meal.time_of_day (singular) to match your schema
             query = Meal.query.filter(*filters, Meal.time_of_day == tod)
 
-            # Add optional filters only if they are provided
             if time:
                 query = query.filter(Meal.prep_time == time)
 
@@ -169,13 +166,11 @@ def get_random_menu():
             if meal_type:
                 query = query.filter(Meal.meal_type == meal_type)
 
-            # Exclude meals that contain any of the specified allergens (if provided)
+            # FIXED: Use Meal.allergies (singular) to match your schema
             if allergy_list:
                 for allergen in allergy_list:
-                    # Assuming Meal.allergens is a comma-separated string field
                     query = query.filter(~Meal.allergies.ilike(f'%{allergen}%'))
 
-            # Get random meal
             meal = query.order_by(func.random()).first()
 
             if meal:
@@ -187,7 +182,6 @@ def get_random_menu():
         })
 
     return jsonify(menu)
-
 
 @app.route('/')
 def index():
