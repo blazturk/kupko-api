@@ -116,57 +116,15 @@ def erase(id):
 
 def build_filters_from_args(args):
     filters = []
+    # Extract parameters we don't want to process as generic filters
+    excluded_params = ['n', 'times_of_day', 'time', 'allergies', 'max_price', 'meal_type']
 
-    # meal_type: case-insensitive match (use ilike)
-    meal_type = args.get('meal_type')
-    if meal_type:
-        filters.append(Meal.meal_type.ilike(meal_type))
-
-    # price: convert to float safely
-    price = args.get('price')
-    if price:
-        try:
-            price_val = float(price)
-            filters.append(Meal.price <= price_val)
-        except ValueError:
-            # ignore invalid price or optionally raise a 400
-            pass
-
-    # prep_time: convert to int safely (or float if that's your schema)
-    prep_time = args.get('prep_time')
-    if prep_time:
-        try:
-            prep_val = int(prep_time)
-            filters.append(Meal.prep_time == prep_val)
-        except ValueError:
-            pass
-
-    # allergies: exclude any meal that contains ANY of the forbidden allergens.
-    # Use coalesce to make NULL become '' so concat/like doesn't become NULL.
-    allergies_param = args.get('allergies')
-    if allergies_param:
-        # Parse and normalize
-        allergies = [a.strip().lower() for a in allergies_param.split(',') if a.strip()]
-        if allergies:
-            allergy_filters = []
-            # Build: lower(concat(',', coalesce(allergies,''), ',')) LIKE '%,allergy,%'
-            allergies_field = func.lower(func.concat(',', func.coalesce(Meal.allergies, ''), ','))
-            for allergy in allergies:
-                pattern = f'%,{allergy},%'
-                allergy_filters.append(allergies_field.like(pattern))
-
-            # Exclude meals where ANY allergy matches: i.e. NOT (any LIKE)
-            # But keep meals that have no allergy info (NULL/empty) as allowed.
-            filters.append(
-                or_(
-                    Meal.allergies.is_(None),
-                    Meal.allergies == '',
-                    not_(or_(*allergy_filters))
-                )
-            )
-        else:
-            # allergies param provided but ended up empty after parsing; ignore
-            pass
+    for key, value in args.items():
+        if key not in excluded_params and value:
+            # Add your existing filter logic for other parameters
+            # For example:
+            if hasattr(Meal, key):
+                filters.append(getattr(Meal, key) == value)
 
     return filters
 
@@ -215,7 +173,7 @@ def get_random_menu():
             if allergy_list:
                 for allergen in allergy_list:
                     # Assuming Meal.allergens is a comma-separated string field
-                    query = query.filter(~Meal.allergens.ilike(f'%{allergen}%'))
+                    query = query.filter(~Meal.allergies.ilike(f'%{allergen}%'))
 
             # Get random meal
             meal = query.order_by(func.random()).first()
