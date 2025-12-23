@@ -171,41 +171,50 @@ def build_filters_from_args(args):
     return filters
 
 
-@app.route('/random_menu/<n>/<times_of_day_list>/<time>/<allergies>/<max_price>/<meal_type>', methods=['GET'])
-def get_random_menu(n, times_of_day_list, time, allergies, max_price, meal_type):
-    # Parse allergies from the route parameter
+@app.route('/random_menu', methods=['GET'])
+def get_random_menu():
+    # Get all parameters from query string (all optional)
+    n = request.args.get('n', default=7, type=int)  # Default to 7 days
+    times_of_day_list = request.args.get('times_of_day', default='breakfast,lunch,dinner', type=str)
+    time = request.args.get('time', default=None, type=str)  # Optional prep_time filter
+    allergies = request.args.get('allergies', default='', type=str)
+    max_price = request.args.get('max_price', default=None, type=float)  # Optional price filter
+    meal_type = request.args.get('meal_type', default=None, type=str)  # Optional meal_type filter
+
+    # Parse allergies (empty string if not provided)
     allergy_list = [a.strip().lower() for a in allergies.split(',') if a.strip()]
 
-    # Build filters once from the request arguments
+    # Build filters from request arguments (this function should handle missing args)
     filters = build_filters_from_args(request.args)
 
     menu = []
-    for day_index in range(int(n)):
+    for day_index in range(n):
         daily_meals = []
         times_of_day = times_of_day_list.split(',')
 
         for tod in times_of_day:
-            # Start with the base query
-            query = Meal.query.filter(
-                *filters,
-                Meal.time_of_day == tod,
-                Meal.prep_time == time,
-                Meal.price <= max_price,
-                Meal.meal_type == meal_type
-            )
+            # Start building the query with basic filters
+            query = Meal.query.filter(*filters, Meal.time_of_day == tod)
 
-            # Exclude meals that contain any of the specified allergens
-            # Assuming Meal.allergens is a comma-separated string like "dairy,nuts,gluten"
+            # Add optional filters only if they are provided
+            if time:
+                query = query.filter(Meal.prep_time == time)
+
+            if max_price is not None:
+                query = query.filter(Meal.price <= max_price)
+
+            if meal_type:
+                query = query.filter(Meal.meal_type == meal_type)
+
+            # Exclude meals that contain any of the specified allergens (if provided)
             if allergy_list:
                 # Create a filter for each allergen
                 for allergen in allergy_list:
-                    # This excludes meals where the allergen appears in the comma-separated list
-                    # The ilike with wildcards ensures we match the allergen anywhere in the list
-                    query = query.filter(
-                        ~Meal.allergies.ilike(f'%{allergen}%')
-                    )
+                    # Exclude meals containing this allergen
+                    # Note: Changed from Meal.allergies to Meal.allergens to match your variable name
+                    query = query.filter(~Meal.allergies.ilike(f'%{allergen}%'))
 
-            # Get random meal that doesn't contain any allergens
+            # Get random meal
             meal = query.order_by(func.random()).first()
 
             if meal:
