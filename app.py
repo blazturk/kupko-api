@@ -131,45 +131,51 @@ def build_filters_from_args(args):
 
 @app.route('/random_menu', methods=['GET'])
 def get_random_menu():
-    # Must match frontend parameter names:
+    # Get parameters
     n = request.args.get('n', default=7, type=int)
-    time_of_day = request.args.get('time_of_day', default='breakfast,lunch,dinner', type=str)  # ✅
-    prep_time = request.args.get('time', default=None, type=str)  # ✅ 'time' parameter
-    allergies = request.args.get('allergies', default='', type=str)  # ✅
-    max_price = request.args.get('max_price', default=None, type=float)  # ✅ 'max_price' parameter
-    meal_type = request.args.get('meal_type', default=None, type=str)  # ✅
+    time_of_day = request.args.get('time_of_day', default='breakfast,lunch,dinner', type=str)
+    prep_time = request.args.get('time', default=None, type=int)  # Changed to int
+    allergies = request.args.get('allergies', default='', type=str)
+    max_price = request.args.get('max_price', default=None, type=float)
+    meal_type = request.args.get('meal_type', default=None, type=str)
+
+    # Parse time_of_day into a list
+    time_of_day_list = [tod.strip() for tod in time_of_day.split(',') if tod.strip()]
 
     # Parse allergies
     allergy_list = []
     if allergies and allergies.strip().lower() not in ['none', 'null', '']:
         allergy_list = [a.strip().lower() for a in allergies.split(',') if a.strip()]
 
-    # Build filters (make sure this function uses singular names too)
+    # Build base filters (excluding the ones we handle separately)
     filters = build_filters_from_args(request.args)
 
     menu = []
     for day_index in range(n):
         daily_meals = []
-        time_of_day_items = time_of_day.split(',')
 
-        for tod in time_of_day_items:
-            # FIXED: Use Meal.time_of_day (singular) to match your schema
+        for tod in time_of_day_list:
+            # Start with base filters and add time_of_day
             query = Meal.query.filter(*filters, Meal.time_of_day == tod)
 
-            if prep_time:
-                query = query.filter(Meal.prep_time == prep_time)
+            # Apply prep_time filter
+            if prep_time is not None:
+                query = query.filter(Meal.prep_time <= prep_time)
 
+            # Apply max_price filter
             if max_price is not None:
                 query = query.filter(Meal.price <= max_price)
 
+            # Apply meal_type filter
             if meal_type:
                 query = query.filter(Meal.meal_type == meal_type)
 
-            # FIXED: Use Meal.allergies (singular) to match your schema
+            # Apply allergy filters
             if allergy_list:
                 for allergen in allergy_list:
                     query = query.filter(~Meal.allergies.ilike(f'%{allergen}%'))
 
+            # Get a random meal for this time of day
             meal = query.order_by(func.random()).first()
 
             if meal:
@@ -177,7 +183,7 @@ def get_random_menu():
 
         menu.append({
             "day": day_index + 1,
-            "menu": meals_schema.dump(daily_meals)
+            "meals": meals_schema.dump(daily_meals)
         })
 
     return jsonify(menu)
