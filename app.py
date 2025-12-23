@@ -170,22 +170,44 @@ def build_filters_from_args(args):
 
     return filters
 
-@app.route('/random_menu/<n>/<times_of_day_list>', methods=['GET'])
-def get_random_menu(n, times_of_day_list):
-    # Build filters once from the request arguments (don't rebuild inside the loop)
+
+@app.route('/random_menu/<n>/<times_of_day_list>/<time>/<allergies>/<max_price>/<meal_type>', methods=['GET'])
+def get_random_menu(n, times_of_day_list, time, allergies, max_price, meal_type):
+    # Parse allergies from the route parameter
+    allergy_list = [a.strip().lower() for a in allergies.split(',') if a.strip()]
+
+    # Build filters once from the request arguments
     filters = build_filters_from_args(request.args)
 
     menu = []
     for day_index in range(int(n)):
         daily_meals = []
         times_of_day = times_of_day_list.split(',')
+
         for tod in times_of_day:
-            meal = (
-                Meal.query
-                .filter(*filters, Meal.time_of_day == tod)
-                .order_by(func.random())
-                .first()
+            # Start with the base query
+            query = Meal.query.filter(
+                *filters,
+                Meal.time_of_day == tod,
+                Meal.prep_time == time,
+                Meal.price <= max_price,
+                Meal.meal_type == meal_type
             )
+
+            # Exclude meals that contain any of the specified allergens
+            # Assuming Meal.allergens is a comma-separated string like "dairy,nuts,gluten"
+            if allergy_list:
+                # Create a filter for each allergen
+                for allergen in allergy_list:
+                    # This excludes meals where the allergen appears in the comma-separated list
+                    # The ilike with wildcards ensures we match the allergen anywhere in the list
+                    query = query.filter(
+                        ~Meal.allergies.ilike(f'%{allergen}%')
+                    )
+
+            # Get random meal that doesn't contain any allergens
+            meal = query.order_by(func.random()).first()
+
             if meal:
                 daily_meals.append(meal)
 
