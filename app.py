@@ -131,14 +131,18 @@ def build_filters_from_args(args):
 
 @app.route('/random_menu', methods=['GET'])
 def get_random_menu():
-    # FIXED: Use singular 'time_of_day' to match your schema
-    time_of_day_list = request.args.get('time_of_day', default='breakfast,lunch,dinner', type=str)
-
+    # Must match frontend parameter names:
     n = request.args.get('n', default=7, type=int)
-    prep_time = request.args.get('time', default=None, type=str)
-    allergies = request.args.get('allergies', default='', type=str)
-    price = request.args.get('max_price', default=None, type=float)
-    meal_type = request.args.get('meal_type', default=None, type=str)
+    time_of_day = request.args.get('time_of_day', default='breakfast,lunch,dinner', type=str)  # ✅
+    prep_time = request.args.get('time', default=None, type=str)  # ✅ 'time' parameter
+    allergies = request.args.get('allergies', default='', type=str)  # ✅
+    max_price = request.args.get('max_price', default=None, type=float)  # ✅ 'max_price' parameter
+    meal_type = request.args.get('meal_type', default=None, type=str)  # ✅
+
+    time_of_day_param = request.args.get('time_of_day', default='breakfast,lunch,dinner', type=str)
+
+    import urllib.parse
+    time_of_day_list = urllib.parse.unquote(time_of_day_param)
 
     # Parse allergies
     allergy_list = []
@@ -160,8 +164,8 @@ def get_random_menu():
             if prep_time:
                 query = query.filter(Meal.prep_time == prep_time)
 
-            if price is not None:
-                query = query.filter(Meal.price <= price)
+            if max_price is not None:
+                query = query.filter(Meal.price <= max_price)
 
             if meal_type:
                 query = query.filter(Meal.meal_type == meal_type)
