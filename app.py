@@ -173,18 +173,23 @@ def build_filters_from_args(args):
 
 @app.route('/random_menu', methods=['GET'])
 def get_random_menu():
-    # Get all parameters from query string (all optional)
-    n = request.args.get('n', default=7, type=int)  # Default to 7 days
+    # Get all parameters from query string with defaults
+    n = request.args.get('n', default=7, type=int)
     times_of_day_list = request.args.get('times_of_day', default='breakfast,lunch,dinner', type=str)
-    time = request.args.get('time', default=None, type=str)  # Optional prep_time filter
+
+    # Optional parameters - only use if provided
+    time = request.args.get('time', default=None, type=str)
     allergies = request.args.get('allergies', default='', type=str)
-    max_price = request.args.get('max_price', default=None, type=float)  # Optional price filter
-    meal_type = request.args.get('meal_type', default=None, type=str)  # Optional meal_type filter
+    max_price = request.args.get('max_price', default=None, type=float)
+    meal_type = request.args.get('meal_type', default=None, type=str)
 
-    # Parse allergies (empty string if not provided)
-    allergy_list = [a.strip().lower() for a in allergies.split(',') if a.strip()]
+    # Parse allergies
+    allergy_list = []
+    if allergies and allergies.strip().lower() not in ['none', 'null', '']:
+        allergy_list = [a.strip().lower() for a in allergies.split(',') if a.strip()]
 
-    # Build filters from request arguments (this function should handle missing args)
+    # Build filters from request arguments (excluding the ones we're handling separately)
+    # You might need to adjust build_filters_from_args to skip these parameters
     filters = build_filters_from_args(request.args)
 
     menu = []
@@ -208,11 +213,9 @@ def get_random_menu():
 
             # Exclude meals that contain any of the specified allergens (if provided)
             if allergy_list:
-                # Create a filter for each allergen
                 for allergen in allergy_list:
-                    # Exclude meals containing this allergen
-                    # Note: Changed from Meal.allergies to Meal.allergens to match your variable name
-                    query = query.filter(~Meal.allergies.ilike(f'%{allergen}%'))
+                    # Assuming Meal.allergens is a comma-separated string field
+                    query = query.filter(~Meal.allergens.ilike(f'%{allergen}%'))
 
             # Get random meal
             meal = query.order_by(func.random()).first()
