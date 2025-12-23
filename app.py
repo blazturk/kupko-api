@@ -135,7 +135,7 @@ def get_random_menu():
     time_of_day_list = request.args.get('time_of_day', default='breakfast,lunch,dinner', type=str)
 
     n = request.args.get('n', default=7, type=int)
-    time = request.args.get('time', default=None, type=str)
+    prep_time = request.args.get('time', default=None, type=str)
     allergies = request.args.get('allergies', default='', type=str)
     price = request.args.get('max_price', default=None, type=float)
     meal_type = request.args.get('meal_type', default=None, type=str)
@@ -157,8 +157,8 @@ def get_random_menu():
             # FIXED: Use Meal.time_of_day (singular) to match your schema
             query = Meal.query.filter(*filters, Meal.time_of_day == tod)
 
-            if time:
-                query = query.filter(Meal.prep_time == time)
+            if prep_time:
+                query = query.filter(Meal.prep_time == prep_time)
 
             if price is not None:
                 query = query.filter(Meal.price <= price)
