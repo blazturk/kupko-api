@@ -130,11 +130,12 @@ def build_filters_from_args(args):
 
 
 @app.route('/random_menu', methods=['GET'])
+@app.route('/random_menu', methods=['GET'])
 def get_random_menu():
     # Get parameters
     n = request.args.get('n', default=7, type=int)
     time_of_day = request.args.get('time_of_day', default='breakfast,lunch,dinner', type=str)
-    prep_time = request.args.get('time', default=None, type=int)  # Changed to int
+    prep_time = request.args.get('time', default=None, type=int)
     allergies = request.args.get('allergies', default='', type=str)
     max_price = request.args.get('max_price', default=None, type=float)
     meal_type = request.args.get('meal_type', default=None, type=str)
@@ -147,8 +148,11 @@ def get_random_menu():
     if allergies and allergies.strip().lower() not in ['none', 'null', '']:
         allergy_list = [a.strip().lower() for a in allergies.split(',') if a.strip()]
 
-    # Build base filters (excluding the ones we handle separately)
+    # Build base filters
     filters = build_filters_from_args(request.args)
+
+    # Track used meal IDs to avoid repetition
+    used_meal_ids = set()
 
     menu = []
     for day_index in range(n):
@@ -157,6 +161,10 @@ def get_random_menu():
         for tod in time_of_day_list:
             # Start with base filters and add time_of_day
             query = Meal.query.filter(*filters, Meal.time_of_day == tod)
+
+            # Exclude already used meals
+            if used_meal_ids:
+                query = query.filter(~Meal.id.in_(used_meal_ids))
 
             # Apply prep_time filter
             if prep_time is not None:
@@ -180,14 +188,16 @@ def get_random_menu():
 
             if meal:
                 daily_meals.append(meal)
+                used_meal_ids.add(meal.id)
 
-        menu.append({
-            "day": day_index + 1,
-            "meals": meals_schema.dump(daily_meals)
-        })
+        # Only add the day if we found at least one meal
+        if daily_meals:
+            menu.append({
+                "day": day_index + 1,
+                "meals": meals_schema.dump(daily_meals)
+            })
 
     return jsonify(menu)
-
 @app.route('/')
 def index():
     profiles = Meal.query.all()
