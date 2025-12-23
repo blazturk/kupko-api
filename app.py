@@ -117,116 +117,103 @@ def erase(id):
 def build_filters_from_args(args):
     filters = []
 
-    # meal_type: case-insensitive match (use ilike)
+    # meal_type: case-insensitive match
     meal_type = args.get('meal_type')
     if meal_type:
         filters.append(Meal.meal_type.ilike(meal_type))
 
-    # price: convert to float safely
-    price = args.get('price')
-    if price:
+    # max_price (not 'price')
+    max_price = args.get('max_price')
+    if max_price:
         try:
-            price_val = float(price)
+            price_val = float(max_price)
             filters.append(Meal.price <= price_val)
         except ValueError:
-            # ignore invalid price or optionally raise a 400
             pass
 
-    # prep_time: convert to int safely (or float if that's your schema)
-    prep_time = args.get('prep_time')
+    # prep_time as 'time' parameter
+    prep_time = args.get('time')
     if prep_time:
         try:
             prep_val = int(prep_time)
-            filters.append(Meal.prep_time == prep_val)
+            filters.append(Meal.prep_time <= prep_val)  # Changed to <= (less than or equal)
         except ValueError:
             pass
 
-    # allergies: exclude any meal that contains ANY of the forbidden allergens.
-    # Use coalesce to make NULL become '' so concat/like doesn't become NULL.
-    allergies_param = args.get('allergies')
-    if allergies_param:
-        # Parse and normalize
-        allergies = [a.strip().lower() for a in allergies_param.split(',') if a.strip()]
-        if allergies:
-            allergy_filters = []
-            # Build: lower(concat(',', coalesce(allergies,''), ',')) LIKE '%,allergy,%'
-            allergies_field = func.lower(func.concat(',', func.coalesce(Meal.allergies, ''), ','))
-            for allergy in allergies:
-                pattern = f'%,{allergy},%'
-                allergy_filters.append(allergies_field.like(pattern))
-
-            # Exclude meals where ANY allergy matches: i.e. NOT (any LIKE)
-            # But keep meals that have no allergy info (NULL/empty) as allowed.
-            filters.append(
-                or_(
-                    Meal.allergies.is_(None),
-                    Meal.allergies == '',
-                    not_(or_(*allergy_filters))
-                )
-            )
-        else:
-            # allergies param provided but ended up empty after parsing; ignore
-            pass
+    # Note: allergies are now handled in the main function, not here
+    # Removed the complex allergy logic
 
     return filters
 
 
 @app.route('/random_menu', methods=['GET'])
 def get_random_menu():
-    # Get parameters with defaults (all optional except n)
-    n = request.args.get('n', default=7, type=int)
-    times_of_day_list = request.args.get('time_of_day', default='breakfast,lunch,dinner', type=str)
-    prep_time = request.args.get('time', default=None, type=int)
-    allergies = request.args.get('allergies', default=None, type=str)
-    max_price = request.args.get('max_price', default=None, type=float)
-    meal_type = request.args.get('meal_type', default=None, type=str)
+    try:
+        n = request.args.get('n', default=7, type=int)
+        times_of_day_list = request.args.get('time_of_day', default='breakfast,lunch,dinner', type=str)
+        prep_time = request.args.get('time', default=None, type=int)
+        allergies = request.args.get('allergies', default=None, type=str)
+        max_price = request.args.get('max_price', default=None, type=float)
+        meal_type = request.args.get('meal_type', default=None, type=str)
 
-    # Build filters from args
-    filters = build_filters_from_args(request.args)
+        # Get base filters (meal_type, max_price, prep_time)
+        filters = build_filters_from_args(request.args)
 
-    # Parse times of day
-    times_of_day = [tod.strip() for tod in times_of_day_list.split(',') if tod.strip()]
+        times_of_day = [tod.strip() for tod in times_of_day_list.split(',') if tod.strip()]
 
-    # Parse allergies if provided
-    allergy_list = []
-    if allergies:
-        allergy_list = [a.strip().lower() for a in allergies.split(',') if a.strip()]
+        # Parse allergies separately
+        allergy_list = []
+        if allergies and allergies.strip():
+            allergy_list = [a.strip().lower() for a in allergies.split(',') if a.strip()]
 
-    menu = []
-    for day_index in range(n):
-        daily_meals = []
+        used_meal_ids = set()
+        menu = []
 
-        for tod in times_of_day:
-            # Start with base filters
-            query = Meal.query.filter(*filters, Meal.time_of_day == tod)
+        for day_index in range(n):
+            daily_meals = []
 
-            # Add optional filters only if provided
-            if prep_time is not None:
-                query = query.filter(Meal.prep_time <= prep_time)
+            for tod in times_of_day:
+                # Apply base filters + time_of_day
+                query = Meal.query.filter(*filters, Meal.time_of_day == tod)
 
-            if max_price is not None:
-                query = query.filter(Meal.price <= max_price)
+                # Exclude already used meals
+                if used_meal_ids:
+                    query = query.filter(~Meal.id.in_(used_meal_ids))
 
-            if meal_type is not None:
-                query = query.filter(Meal.meal_type == meal_type)
+                # Apply allergy filters - SIMPLE VERSION
+                if allergy_list:
+                    for allergen in allergy_list:
+                        # Exclude meals where allergies field contains this allergen
+                        # Handles both "gluten" and "gluten,eggs,dairy"
+                        query = query.filter(
+                            or_(
+                                Meal.allergies.is_(None),
+                                Meal.allergies == '',
+                                ~Meal.allergies.ilike(f'%{allergen}%')
+                            )
+                        )
 
-            # Apply allergy filters if any
-            if allergy_list:
-                for allergen in allergy_list:
-                    query = query.filter(~Meal.allergies.ilike(f'%{allergen}%'))
+                meal = query.order_by(func.random()).first()
 
-            meal = query.order_by(func.random()).first()
+                if meal:
+                    daily_meals.append(meal)
+                    used_meal_ids.add(meal.id)
 
-            if meal:
-                daily_meals.append(meal)
+            if daily_meals:
+                menu.append({
+                    "day": day_index + 1,
+                    "menu": meals_schema.dump(daily_meals)
+                })
 
-        menu.append({
-            "day": day_index + 1,
-            "menu": meals_schema.dump(daily_meals)
-        })
+        return jsonify(menu)
 
-    return jsonify(menu)
-
+    except Exception as e:
+        import traceback
+        return jsonify({
+            "error": str(e),
+            "type": type(e).__name__,
+            "traceback": traceback.format_exc()
+        }), 500
 
 @app.route('/')
 def index():
